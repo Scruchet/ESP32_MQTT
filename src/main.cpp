@@ -2,13 +2,21 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
+//----------------------------------
+// DEFINE LED PINS
+#define DEBUG 2
 #define LED 19
 #define RED 23
 #define GREEN 22
-#define BLUE 21
-#define HIGH 255
-#define LOW 0
+#define BLUE 21   
+//----------------------------------
 
+#define high 255 //analog HIGH state
+#define low 0    //analog LOW state
+
+
+//----------------------------------
+//IMPORTANT GLOBAL VARIABLES
 const char* ssid = "Rang Dong Lab_2G";
 const char* passwd = "ktdt123456";
 const char* broker = "192.168.31.5";
@@ -16,8 +24,6 @@ const char* rgbTopic = "/topic/simon/rgb";
 const char* switchTopic = "/topic/simon/switch";
 const char* slideTopic = "/topic/simon/slide";
 const char* buttonTopic = "/topic/simon/button";
-
-
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -46,6 +52,8 @@ void reconnect(){
     if(client.connect("ESP_SIMON")){
       Serial.print("\nConnected to ");
       Serial.println(broker);
+      //-----------------------------
+      //Connecting to each topic
       client.subscribe(rgbTopic);
       client.subscribe(switchTopic);
       client.subscribe(slideTopic);
@@ -58,28 +66,20 @@ void reconnect(){
   }
 }
 
-void switch_led(char* message){
+void switch_led(char* message){ //Change led state using a switch
   //-------SWITCH_ON_OFF---------
   if (strcmp(message, "on") == 0){
-    analogWrite(LED, HIGH);
-    led_state = HIGH;
+    analogWrite(LED, high);
+    led_state = high;
   }
   else if (strcmp(message, "off") == 0){
-    analogWrite(LED, LOW);
-    led_state = LOW;
+    analogWrite(LED, low);
+    led_state = low;
   }
-  // else{
-  //   Serial.print("\n\rErreur switch\r\n");
-  //   for (int i = 0 ; i < 5 ; i++){
-  //     digitalWrite(2, LOW);
-  //     delay(20);
-  //     digitalWrite(2, HIGH);
-  //     delay(20);
-  //   }
-  // }
+
 }
 
-void rgb_led(char* message){
+void rgb_led(char* message){ //Control RGB LED
   //------RGB_LED-------
   int r, g, b;
   if (sscanf(message, "rgb(%d, %d, %d)", &r, &g, &b) == 3){
@@ -90,90 +90,86 @@ void rgb_led(char* message){
     analogWrite(GREEN,g);
     analogWrite(BLUE,b);
   }
-  else { //erreur
-    Serial.print("\n\rErreur rgb\r\n");
+  else { //error
+    Serial.print("\n\r RGB ERROR r\n");
     for (int i = 0 ; i < 5 ; i++){
-      digitalWrite(2, LOW);
+      digitalWrite(DEBUG, low);
       delay(20);
-      digitalWrite(2, HIGH);
+      digitalWrite(DEBUG, high);
       delay(20);
     }
   }
 }
 
-void slide_led(char* message){
-  //------RGB_LED-------
+void slide_led(char* message){ //Led PWM command
   int brightness = atoi(message);
   analogWrite(LED, brightness);
   led_state = brightness;
 }
 
-void button_led(){
-  Serial.print("\n");
-  Serial.print(led_state);
-  Serial.print(" ---> ");
-  if (led_state > LOW){
-    led_state = LOW;
-    analogWrite(LED, LOW);
+void button_led(){ //Press button and change led state
+  if (led_state > low){
+    led_state = low;
+    analogWrite(LED, low);
       }
-  else if (led_state == LOW){ 
+  else if (led_state == low){ 
 
-    led_state = HIGH;
-    analogWrite(LED,HIGH);
-    
+    led_state = high;
+    analogWrite(LED,high);
   }
-  Serial.print(led_state);
+}
+
+void choose_topic(char* topic , char* message){
+  if (strcmp(topic, switchTopic) == 0){
+    switch_led(message);
+  }
+  else if (strcmp(topic, rgbTopic) == 0){
+    rgb_led(message);
+  }
+  else if (strcmp(topic, slideTopic) == 0){
+    slide_led(message);
+  }
+  else if (strcmp(topic, buttonTopic) == 0){
+    button_led();
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int length){
-
   payload[length] = 0;
-
   Serial.print("\n\rReceived messages; ");
   Serial.print(topic);
   Serial.print("\n\rMessage :");
   for (int i = 0 ; i < length ; i++ ){
     Serial.print((char) payload[i]);
   } 
-  if (strcmp(topic, switchTopic) == 0){
-    switch_led((char*)payload);
-  }
-  else if (strcmp(topic, rgbTopic) == 0){
-    rgb_led((char*)payload);
-  }
-  else if (strcmp(topic, slideTopic) == 0){
-    slide_led((char*)payload);
-  }
-  else if (strcmp(topic, buttonTopic) == 0){
-    button_led();
-  }
-  else {
-    Serial.print("\n\rErreur topic\r\n");
-    for (int i = 0 ; i < 5 ; i++){
-      digitalWrite(2, LOW);
-      delay(20);
-      digitalWrite(2, HIGH);
-      delay(20);
-    }
-  }
+  choose_topic(topic, (char*)payload);
 }
+
+void setup_led(){
+  pinMode(RED,OUTPUT);
+  pinMode(GREEN,OUTPUT);
+  pinMode(BLUE,OUTPUT);
+  pinMode(LED,OUTPUT);
+  pinMode(DEBUG,OUTPUT);
+  analogWrite(RED, low);
+  analogWrite(GREEN, low);
+  analogWrite(BLUE, low);
+  analogWrite(LED, low);
+  digitalWrite(DEBUG,LOW);
+}
+
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
   setupWifi();
-  pinMode(RED,OUTPUT);
-  pinMode(LED,OUTPUT);
-  pinMode(GREEN,OUTPUT);
-  pinMode(2,OUTPUT);
-  pinMode(BLUE,OUTPUT);
-  client.setServer(broker,1883);
+  setup_led();
+  client.setServer(broker,1883); //MQTT PORT
   client.setCallback(callback);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   if (!client.connected()){
     reconnect();
   }
   client.loop();
 }
+
